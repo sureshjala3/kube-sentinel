@@ -286,11 +286,7 @@ func ImportClustersFromKubeconfig(kubeconfig *clientcmdapi.Config) int64 {
 		}
 		authInfo := kubeconfig.AuthInfos[context.AuthInfo]
 		if authInfo != nil && authInfo.Exec != nil {
-			var handled bool
-			authInfo, handled, skipSystemSync = processAuthInfo(authInfo)
-			if !handled {
-				// Continue with default auth info if not specifically handled
-			}
+			authInfo, _, skipSystemSync = processAuthInfo(authInfo)
 		}
 		config.AuthInfos = map[string]*clientcmdapi.AuthInfo{
 			context.AuthInfo: authInfo,
