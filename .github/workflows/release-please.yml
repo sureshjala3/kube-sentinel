@@ -13,4 +13,13 @@ jobs:
   release-please:
     runs-on: ubuntu-latest
     steps:
+      # Step 1: Run Release Please and give it an ID
       - uses: googleapis/release-please-action@v4
+        id: release
+
+      # Step 2: Run custom script ONLY if a release was created to update chart and other files
+      - name: Run my script with the new version
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          echo "The new version is: ${{ steps.release.outputs.version }}"
+          echo "The git tag is: ${{ steps.release.outputs.tag_name }}"

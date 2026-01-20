@@ -12,9 +12,7 @@
                     "jsonpath": "$.version"
                 },
                 "README.md",
-                "charts/cloud-sentinel-k8s/Chart.yaml",
-                "charts/cloud-sentinel-k8s/values.yaml",
-                "charts/cloud-sentinel-k8s/README.md"
+                "charts/cloud-sentinel-k8s/values.yaml"
             ]
         }
     }
