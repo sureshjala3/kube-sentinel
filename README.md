@@ -12,7 +12,7 @@ _A modern, intuitive Kubernetes dashboard_
 [![License](https://img.shields.io/badge/License-Apache-green.svg)](LICENSE)
 [![HelloGitHub](https://api.hellogithub.com/v1/widgets/recommend.svg?rid=a8bd165df55f41a295b62c716228b007&claim_uid=w5uk718RFhDzdCX&theme=small)](https://hellogithub.com/repository/pixelvide/cloud-sentinel-k8s)
 
-[**Live Demo**](https://cloud-sentinel-k8s-demo.pixelvide.cloud) | [**Documentation**](https://cloud-sentinel-k8s.pixelvide.cloud)
+[**Documentation**](https://cloud-sentinel-k8s.pixelvide.cloud)
 <br>
 **English**
 

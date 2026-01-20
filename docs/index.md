@@ -16,9 +16,7 @@ hero:
     - theme: alt
       text: View on GitHub
       link: https://github.com/pixelvide/cloud-sentinel-k8s
-    - theme: alt
-      text: View Demo
-      link: https://cloud-sentinel-k8s-demo.pixelvide.cloud
+
 
 features:
   - icon: 🎯
