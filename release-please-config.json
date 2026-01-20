@@ -8,7 +8,24 @@
                     "type": "json",
                     "path": "ui/package.json",
                     "jsonpath": "$.version"
-                }
+                },
+                {
+                    "type": "yaml",
+                    "path": "charts/cloud-sentinel-k8s/Chart.yaml",
+                    "jsonpath": "$.version"
+                },
+                {
+                    "type": "yaml",
+                    "path": "charts/cloud-sentinel-k8s/Chart.yaml",
+                    "jsonpath": "$.appVersion"
+                },
+                {
+                    "type": "yaml",
+                    "path": "charts/cloud-sentinel-k8s/values.yaml",
+                    "jsonpath": "$.image.tag"
+                },
+                "README.md",
+                "charts/cloud-sentinel-k8s/README.md"
             ]
         }
     }
