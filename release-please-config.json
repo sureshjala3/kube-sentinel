@@ -3,6 +3,8 @@
         ".": {
             "release-type": "simple",
             "include-v-in-tag": true,
+            "include-component-in-tag": false,
+            "changelog-path": "CHANGELOG.md",
             "extra-files": [
                 "version.txt",
                 {
@@ -10,14 +12,15 @@
                     "path": "ui/package.json",
                     "jsonpath": "$.version"
                 },
-                "README.md"
-            ]
-        },
-        "charts/cloud-sentinel-k8s": {
-            "release-type": "helm",
-            "changelog-path": "CHANGELOG.md",
-            "extra-files": [
-                "charts/cloud-sentinel-k8s/values.yaml",
+                {
+                    "type": "simple",
+                    "path": "charts/cloud-sentinel-k8s/Chart.yaml"
+                },
+                {
+                    "type": "simple",
+                    "path": "charts/cloud-sentinel-k8s/values.yaml"
+                },
+                "README.md",
                 "charts/cloud-sentinel-k8s/README.md"
             ]
         }
