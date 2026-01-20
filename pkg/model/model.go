@@ -166,7 +166,7 @@ func InitDB() {
 
 // seedGitlabHosts seeds the gitlab_hosts table from the GITLAB_HOSTS environment variable
 func seedGitlabHosts() {
-	envHosts := common.GitlabHosts
+	envHosts := os.Getenv("GITLAB_HOSTS")
 	if envHosts == "" {
 		return
 	}
