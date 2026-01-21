@@ -18,7 +18,6 @@ jobs:
         id: release
 
       # Step 2: Run custom script ONLY if a release was created to update chart and other files
-      # Step 2: Run custom script ONLY if a release was created to update chart and other files
       - name: Run release script
         if: ${{ steps.release.outputs.release_created }}
         run: |

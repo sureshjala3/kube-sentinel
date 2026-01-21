@@ -50,13 +50,22 @@ $SED_CMD -i -E "s|(refs/tags/v)[0-9]+\.[0-9]+\.[0-9]+|\1$VERSION|g" README.md
 # Update app version mentions if any? Or usually just keep in sync.
 # Previous script did a simple replace. Let's try to be specific for App Version or Image Tag.
 $SED_CMD -i -E "s|(ghcr.io/pixelvide/cloud-sentinel-k8s:)[0-9]+\.[0-9]+\.[0-9]+|\1$VERSION|g" "$CHART_DIR/README.md"
-$SED_CMD -i -E "s|(App Version: )[0-9]+\.[0-9]+\.[0-9]+|\1$VERSION|g" "$CHART_DIR/README.md"
+# Update Version badge: ![Version: v0.0.0] -> ![Version: v1.0.0]
+$SED_CMD -i -E "s|(Version: v)[0-9]+\.[0-9]+\.[0-9]+|\1$VERSION|g" "$CHART_DIR/README.md"
+# Update Version link: Version-v0.0.0 -> Version-v1.0.0
+$SED_CMD -i -E "s|(Version-v)[0-9]+\.[0-9]+\.[0-9]+|\1$VERSION|g" "$CHART_DIR/README.md"
+# Update AppVersion badge/link
+$SED_CMD -i -E "s|(AppVersion: v?)[0-9]+\.[0-9]+\.[0-9]+|\1$VERSION|g" "$CHART_DIR/README.md"
+$SED_CMD -i -E "s|(AppVersion-v?)[0-9]+\.[0-9]+\.[0-9]+|\1$VERSION|g" "$CHART_DIR/README.md"
 
 # Update Chart Values
 # tag: 0.0.0
 $SED_CMD -i -E "s|(tag: )\"?[0-9]+\.[0-9]+\.[0-9]+\"?|\1$VERSION|g" "$CHART_DIR/values.yaml"
 
 # Update Chart.yaml
+# version: 0.0.0 -> version: 1.2.3 (Strict SemVer, no v)
+$SED_CMD -i -E "s|(version: )\"?[0-9]+\.[0-9]+\.[0-9]+\"?|\1$VERSION|g" "$CHART_DIR/Chart.yaml"
+
 # appVersion: "v0.0.0" -> appVersion: "v1.2.3"
 # Note: User wanted to strip v in some places, but Chart.yaml appVersion usually keeps v if that's the convention.
 # User config had `include-v-in-tag: true`. The previous `release-please` setup with `simple` updater handles this.
