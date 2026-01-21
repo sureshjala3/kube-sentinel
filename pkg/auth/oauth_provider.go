@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -9,6 +10,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/pixelvide/cloud-sentinel-k8s/pkg/common"
 	"github.com/pixelvide/cloud-sentinel-k8s/pkg/model"
 	"k8s.io/klog/v2"
 )
@@ -78,7 +80,7 @@ func discoverOAuthEndpoints(issuer, providerName string) (*struct {
 		}
 	}
 
-	resp, err := http.Get(wellKnown)
+	resp, err := getHTTPClient(0).Get(wellKnown)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch well-known configuration: %w", err)
 	}
@@ -180,7 +182,7 @@ func (g *GenericProvider) ExchangeCodeForToken(code string) (*TokenResponse, err
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := getHTTPClient(10 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -211,7 +213,7 @@ func (g *GenericProvider) RefreshToken(refreshToken string) (*TokenResponse, err
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := getHTTPClient(10 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -236,7 +238,7 @@ func (g *GenericProvider) GetUserInfo(accessToken string) (*model.User, error) {
 	req.Header.Set("Authorization", "Bearer "+accessToken)
 	req.Header.Set("Accept", "application/json")
 
-	client := &http.Client{Timeout: 10 * time.Second}
+	client := getHTTPClient(10 * time.Second)
 	resp, err := client.Do(req)
 	if err != nil {
 		return nil, err
@@ -336,7 +338,7 @@ func (g *GenericProvider) GetUserInfo(accessToken string) (*model.User, error) {
 // fetchAzureADGroups fetches group memberships from Azure AD Graph API /me/memberOf endpoint
 // Handles pagination to retrieve all groups (Azure AD returns max 100 per page)
 func (g *GenericProvider) fetchAzureADGroups(accessToken string) ([]interface{}, error) {
-	client := &http.Client{Timeout: 30 * time.Second}
+	client := getHTTPClient(30 * time.Second)
 	groups := make([]interface{}, 0)
 	nextLink := graphAPIMemberOf
 	totalFetched := 0
@@ -393,4 +395,19 @@ func (g *GenericProvider) fetchAzureADGroups(accessToken string) ([]interface{},
 
 	klog.V(1).Infof("Fetched %d groups from /me/memberOf across %d total memberships", len(groups), totalFetched)
 	return groups, nil
+}
+
+func getHTTPClient(timeout time.Duration) *http.Client {
+	if timeout == 0 {
+		timeout = 10 * time.Second
+	}
+	client := &http.Client{
+		Timeout: timeout,
+	}
+	if common.InsecureSkipVerify {
+		client.Transport = &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true},
+		}
+	}
+	return client
 }

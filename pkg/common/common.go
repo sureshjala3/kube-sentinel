@@ -40,6 +40,7 @@ var (
 
 	DisableGZIP         = true
 	DisableVersionCheck = false
+	InsecureSkipVerify  = false
 
 	APIKeyProvider = "api_key"
 )
@@ -95,5 +96,10 @@ func LoadEnvs() {
 
 	if v := os.Getenv("GITLAB_HOSTS"); v != "" {
 		GitlabHosts = v
+	}
+
+	if v := os.Getenv("INSECURE_SKIP_VERIFY"); v == "true" {
+		InsecureSkipVerify = true
+		klog.Warning("INSECURE_SKIP_VERIFY is set to true, SSL certificate verification will be skipped")
 	}
 }

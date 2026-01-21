@@ -8,6 +8,7 @@ import (
 	"github.com/pixelvide/cloud-sentinel-k8s/pkg/common"
 	"github.com/pixelvide/cloud-sentinel-k8s/pkg/utils"
 	"gorm.io/gorm"
+	"k8s.io/klog/v2"
 )
 
 type User struct {
@@ -103,6 +104,7 @@ func FindWithSubOrUpsertUser(user *User) error {
 	// Try to find identity first
 	err := DB.Preload("User").Where("provider = ? AND provider_id = ?", inputProvider, inputSub).First(&identity).Error
 	if err == nil {
+		klog.Infof("Found existing identity for provider=%s sub=%s user_id=%d", inputProvider, inputSub, identity.UserID)
 		// Identity found, update the user object with the one found in DB
 		*user = identity.User
 
@@ -124,6 +126,7 @@ func FindWithSubOrUpsertUser(user *User) error {
 
 		// Always save identity to update LastLoginAt and optionally OIDC groups
 		if err := DB.Save(&identity).Error; err != nil {
+			klog.Errorf("Failed to save identity: %v", err)
 			return err
 		}
 
@@ -131,35 +134,33 @@ func FindWithSubOrUpsertUser(user *User) error {
 	}
 
 	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		klog.Errorf("Error searching for identity: %v", err)
 		return err
 	}
+
+	klog.Infof("Identity not found for provider=%s sub=%s, searching for existing user", inputProvider, inputSub)
 
 	// Identity not found.
 	var existingUser User
 
-	// 1. Legacy Check: Check if user exists by Sub in User table (for backward compatibility)
-	// This handles migration for users who have signed up before UserIdentity table was added.
-	// Since Sub is now transient (gorm:"-"), we must query the DB directly, but we can't scan into User directly to get Sub.
-	// But finding the record is enough.
-	if err := DB.Table("users").Where("sub = ?", inputSub).First(&existingUser).Error; err == nil {
-		// Found legacy user
-	} else if !errors.Is(err, gorm.ErrRecordNotFound) {
-		return err
-	} else {
-		// 2. Check if user exists by username (Account Linking)
-		if err := DB.Where("username = ?", user.Username).First(&existingUser).Error; err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				// User does not exist, create new user
-				now := time.Now()
-				user.LastLoginAt = &now
-				if err := DB.Create(user).Error; err != nil {
-					return err
-				}
-				existingUser = *user
-			} else {
+	// 2. Check if user exists by username (Account Linking)
+	if err := DB.Where("username = ?", user.Username).First(&existingUser).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			klog.Infof("User not found by username=%s, creating new user", user.Username)
+			// User does not exist, create new user
+			now := time.Now()
+			user.LastLoginAt = &now
+			if err := DB.Create(user).Error; err != nil {
+				klog.Errorf("Failed to create new user: %v", err)
 				return err
 			}
+			existingUser = *user
+		} else {
+			klog.Errorf("Error searching for user by username: %v", err)
+			return err
 		}
+	} else {
+		klog.Infof("Found existing user by username=%s id=%d, linking account", user.Username, existingUser.ID)
 	}
 
 	// If we found an existing user (via Sub or Username), we update details
@@ -167,6 +168,7 @@ func FindWithSubOrUpsertUser(user *User) error {
 		now := time.Now()
 		existingUser.LastLoginAt = &now
 		if err := DB.Save(&existingUser).Error; err != nil {
+			klog.Errorf("Failed to update existing user: %v", err)
 			return err
 		}
 		*user = existingUser
@@ -176,6 +178,8 @@ func FindWithSubOrUpsertUser(user *User) error {
 	user.Sub = inputSub
 	user.OIDCGroups = inputOIDCGroups
 	user.Provider = inputProvider // Ensure provider is the current one (e.g. if logging in with new provider for existing user)
+
+	klog.Infof("Creating new identity for user_id=%d provider=%s sub=%s", existingUser.ID, inputProvider, inputSub)
 
 	// Create new identity linked to the user
 	now := time.Now()
@@ -187,7 +191,11 @@ func FindWithSubOrUpsertUser(user *User) error {
 		LastLoginAt: &now,
 	}
 
-	return DB.Create(&newIdentity).Error
+	if err := DB.Create(&newIdentity).Error; err != nil {
+		klog.Errorf("Failed to create new identity: %v", err)
+		return err
+	}
+	return nil
 }
 
 func GetUserByUsername(username string) (*User, error) {

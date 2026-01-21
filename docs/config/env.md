@@ -33,3 +33,4 @@ Cloud Sentinel K8s supports several environment variables to customize its behav
 - **DISABLE_GZIP**: Disable GZIP compression for API responses. Default is `true`.
 - **DISABLE_VERSION_CHECK**: Disable the automatic check for new application versions. Default is `false`.
 - **DISABLE_CACHE**: Disable the Kubernetes client-side cache. Default is `false`.
+- **INSECURE_SKIP_VERIFY**: Disable SSL certificate verification for OAuth providers. Dangerous! Use only in development or if you trust the network. Default is `false`.
