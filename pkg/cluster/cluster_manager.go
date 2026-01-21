@@ -48,6 +48,7 @@ type ClusterManager struct {
 	errors         map[string]string
 	defaultContext string
 	mu             sync.RWMutex
+	activeUsersMu  sync.RWMutex
 }
 
 func createClientSetInCluster(name, prometheusURL string, skipSystemSync bool) (*ClientSet, error) {
@@ -431,11 +432,13 @@ func syncClusters(cm *ClusterManager) error {
 	}
 	klog.Infof("Found %d clusters from database", len(clusters))
 
+	now := time.Now()
+	cm.activeUsersMu.RLock()
+	activeUserIDs := cm.getActiveUserIDs(now)
+	cm.activeUsersMu.RUnlock()
+
 	cm.mu.Lock()
 	defer cm.mu.Unlock()
-
-	now := time.Now()
-	activeUserIDs := cm.getActiveUserIDs(now)
 
 	dbClusterMap := make(map[string]*model.Cluster)
 	for _, cluster := range clusters {
@@ -449,6 +452,12 @@ func syncClusters(cm *ClusterManager) error {
 	return nil
 }
 
+// getActiveUserIDs returns a list of active user IDs.
+// Caller is responsible for locking activeUsersMu if needed, but this function does not lock it itself?
+// Wait, looking at usage:
+// In syncClusters, I'm locking it outside.
+// Let's make this function NOT lock, but assume caller holds the lock OR it's safe.
+// Actually, to be safe and consistent, let's make it internal helper where caller handles lock.
 func (cm *ClusterManager) getActiveUserIDs(now time.Time) []uint {
 	var activeUserIDs []uint
 	for userID, lastActiveAt := range cm.activeUsers {
@@ -751,8 +760,8 @@ func NewClusterManager() (*ClusterManager, error) {
 }
 
 func (cm *ClusterManager) UpdateUserActivity(userID uint) {
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
+	cm.activeUsersMu.Lock()
+	defer cm.activeUsersMu.Unlock()
 	cm.activeUsers[userID] = time.Now()
 	// Trigger sync immediately for this user if not already running
 	select {
@@ -769,14 +778,18 @@ func (cm *ClusterManager) startCleanupRoutine() {
 	ttl := 30 * time.Minute
 
 	for range ticker.C {
-		cm.mu.Lock()
+		// Cleanup active users
+		cm.activeUsersMu.Lock()
 		now := time.Now()
 		for userID, lastActiveAt := range cm.activeUsers {
 			if now.Sub(lastActiveAt) > ttl {
 				delete(cm.activeUsers, userID)
 			}
 		}
+		cm.activeUsersMu.Unlock()
 
+		// Cleanup user clients
+		cm.mu.Lock()
 		for clusterName, users := range cm.userClients {
 			for userID, client := range users {
 				if time.Since(client.LastUsedAt) > ttl {
