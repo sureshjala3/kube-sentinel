@@ -437,9 +437,6 @@ func syncClusters(cm *ClusterManager) error {
 	activeUserIDs := cm.getActiveUserIDs(now)
 	cm.activeUsersMu.RUnlock()
 
-	cm.mu.Lock()
-	defer cm.mu.Unlock()
-
 	dbClusterMap := make(map[string]*model.Cluster)
 	for _, cluster := range clusters {
 		dbClusterMap[cluster.Name] = cluster
@@ -499,22 +496,36 @@ func (cm *ClusterManager) stopClusterSync(cluster *model.Cluster) {
 }
 
 func (cm *ClusterManager) handleSharedSync(cluster *model.Cluster) {
+	cm.mu.RLock()
 	current, currentExist := cm.clusters[cluster.Name]
+	cm.mu.RUnlock()
+
 	if shouldUpdateCluster(current, cluster) {
 		klog.Infof("Updating/Adding shared cluster %s", cluster.Name)
-		if currentExist {
-			delete(cm.clusters, cluster.Name)
-			current.K8sClient.Stop(cluster.Name)
-		}
 		clientSet, err := buildClientSet(cluster)
+
+		cm.mu.Lock()
 		if err != nil {
 			klog.Errorf("Failed to build shared k8s client for cluster %s: %v", cluster.Name, err)
 			cm.errors[cluster.Name] = err.Error()
+			cm.mu.Unlock()
 			return
 		}
+
+		if currentExist {
+			// Stop the old one
+			if old, ok := cm.clusters[cluster.Name]; ok {
+				old.K8sClient.Stop(cluster.Name)
+			}
+		}
+
 		delete(cm.errors, cluster.Name)
 		cm.clusters[cluster.Name] = clientSet
+		cm.mu.Unlock()
 	}
+
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
 	// Stop any user clients for this cluster as it's now shared
 	if userMap, ok := cm.userClients[cluster.Name]; ok {
 		for userID, uc := range userMap {
@@ -527,6 +538,7 @@ func (cm *ClusterManager) handleSharedSync(cluster *model.Cluster) {
 }
 
 func (cm *ClusterManager) handleUserLevelSync(cluster *model.Cluster, activeUserIDs []uint, now time.Time) {
+	cm.mu.Lock()
 	// Stop shared client if it was previously shared
 	if cs, ok := cm.clusters[cluster.Name]; ok {
 		delete(cm.clusters, cluster.Name)
@@ -536,8 +548,8 @@ func (cm *ClusterManager) handleUserLevelSync(cluster *model.Cluster, activeUser
 	if _, ok := cm.userClients[cluster.Name]; !ok {
 		cm.userClients[cluster.Name] = make(map[uint]*UserClient)
 	}
+	cm.mu.Unlock()
 
-	userMap := cm.userClients[cluster.Name]
 	activeUserSet := make(map[uint]bool)
 
 	for _, userID := range activeUserIDs {
@@ -547,36 +559,64 @@ func (cm *ClusterManager) handleUserLevelSync(cluster *model.Cluster, activeUser
 		}
 		activeUserSet[userID] = true
 
+		cm.mu.RLock()
+		userMap := cm.userClients[cluster.Name]
 		uc, exists := userMap[userID]
-		if !exists || shouldUpdateUserClient(uc, cluster) {
+		needsUpdate := !exists || shouldUpdateUserClient(uc, cluster)
+		cm.mu.RUnlock()
+
+		if needsUpdate {
 			klog.Infof("Updating/Adding user cluster client for user %d in cluster %s", userID, cluster.Name)
-			if exists && uc.ClientSet != nil {
-				uc.ClientSet.K8sClient.Stop(fmt.Sprintf("%s-%d", cluster.Name, userID))
-			}
 			newUc, err := buildUserClientSet(cluster, user)
+
+			cm.mu.Lock()
+			// Re-fetch map in case it changed
+			userMap = cm.userClients[cluster.Name]
+			if userMap == nil {
+				cm.userClients[cluster.Name] = make(map[uint]*UserClient)
+				userMap = cm.userClients[cluster.Name]
+			}
+
+			if existingUc, ok := userMap[userID]; ok && existingUc.ClientSet != nil {
+				existingUc.ClientSet.K8sClient.Stop(fmt.Sprintf("%s-%d", cluster.Name, userID))
+			}
+
 			if err != nil {
 				klog.Errorf("Failed to build user client for user %d in cluster %s: %v", userID, cluster.Name, err)
 				userMap[userID] = &UserClient{LastUsedAt: now, Error: err.Error()}
-				continue
+			} else {
+				userMap[userID] = newUc
 			}
-			userMap[userID] = newUc
+			cm.mu.Unlock()
 		} else {
-			uc.LastUsedAt = now
+			cm.mu.Lock()
+			if userMap, ok := cm.userClients[cluster.Name]; ok {
+				if uc, ok := userMap[userID]; ok {
+					uc.LastUsedAt = now
+				}
+			}
+			cm.mu.Unlock()
 		}
 	}
 
-	for userID, uc := range userMap {
-		if !activeUserSet[userID] {
-			klog.Infof("Removing inactive user client for user %d in cluster %s", userID, cluster.Name)
-			if uc.ClientSet != nil {
-				uc.ClientSet.K8sClient.Stop(fmt.Sprintf("%s-%d", cluster.Name, userID))
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
+	if userMap, ok := cm.userClients[cluster.Name]; ok {
+		for userID, uc := range userMap {
+			if !activeUserSet[userID] {
+				klog.Infof("Removing inactive user client for user %d in cluster %s", userID, cluster.Name)
+				if uc.ClientSet != nil {
+					uc.ClientSet.K8sClient.Stop(fmt.Sprintf("%s-%d", cluster.Name, userID))
+				}
+				delete(userMap, userID)
 			}
-			delete(userMap, userID)
 		}
 	}
 }
 
 func (cm *ClusterManager) cleanupDeletedClusters(dbClusterMap map[string]*model.Cluster) {
+	cm.mu.Lock()
+	defer cm.mu.Unlock()
 	for name, cs := range cm.clusters {
 		if _, ok := dbClusterMap[name]; !ok {
 			klog.Infof("Removing shared cluster %s (deleted from DB)", name)
