@@ -114,6 +114,11 @@ func InitDB() {
 		ResourceTemplate{},
 
 		AuditLog{},
+
+		AIProviderProfile{},
+		AISettings{},
+		AIChatSession{},
+		AIChatMessage{},
 	}
 	for _, model := range models {
 		err = DB.AutoMigrate(model)
@@ -145,6 +150,9 @@ func InitDB() {
 	defaultConfigs := map[string]string{
 		DefaultUserAccessKey: "true",
 		LocalLoginEnabledKey: "true",
+		AIAllowUserKeys:      "true",
+		AIForceUserKeys:      "false",
+		AIAllowUserOverride:  "true",
 	}
 	for key, value := range defaultConfigs {
 		if _, err := GetAppConfig(CurrentApp.ID, key); err != nil {

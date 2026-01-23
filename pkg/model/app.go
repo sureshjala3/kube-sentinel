@@ -1,6 +1,12 @@
 package model
 
-import "github.com/pixelvide/cloud-sentinel-k8s/pkg/common"
+import (
+	"sync"
+	"time"
+
+	"github.com/pixelvide/cloud-sentinel-k8s/pkg/common"
+	"k8s.io/klog/v2"
+)
 
 type App struct {
 	Model
@@ -32,7 +38,48 @@ type AppUser struct {
 const (
 	DefaultUserAccessKey = "DEFAULT_USER_ACCESS"
 	LocalLoginEnabledKey = "LOCAL_LOGIN_ENABLED"
+	AIAllowUserKeys      = "AI_ALLOW_USER_KEYS"
+	AIForceUserKeys      = "AI_FORCE_USER_KEYS"
+	AIAllowUserOverride  = "AI_ALLOW_USER_OVERRIDE"
 )
+
+var (
+	configCache = make(map[string]string)
+	cacheMutex  sync.RWMutex
+)
+
+// StartAppConfigRefresher starts a background goroutine to refresh the config cache every 5 minutes.
+func StartAppConfigRefresher() {
+	refreshCache()
+	go func() {
+		ticker := time.NewTicker(5 * time.Minute)
+		for range ticker.C {
+			refreshCache()
+		}
+	}()
+}
+
+func refreshCache() {
+	if CurrentApp == nil {
+		return
+	}
+
+	var configs []AppConfig
+	if err := DB.Where("app_id = ?", CurrentApp.ID).Find(&configs).Error; err != nil {
+		klog.Errorf("Failed to refresh app config cache: %v", err)
+		return
+	}
+
+	newCache := make(map[string]string)
+	for _, cfg := range configs {
+		newCache[cfg.Key] = cfg.Value
+	}
+
+	cacheMutex.Lock()
+	configCache = newCache
+	cacheMutex.Unlock()
+	klog.V(2).Info("App config cache refreshed")
+}
 
 func GetApp(name string) (*App, error) {
 	var app App
@@ -43,6 +90,19 @@ func GetApp(name string) (*App, error) {
 }
 
 func GetAppConfig(appID uint, key string) (*AppConfig, error) {
+	cacheMutex.RLock()
+	val, ok := configCache[key]
+	cacheMutex.RUnlock()
+
+	if ok {
+		return &AppConfig{
+			AppID: appID,
+			Key:   key,
+			Value: val,
+		}, nil
+	}
+
+	// Fallback to DB if not in cache (e.g. before first refresh or if appID differs)
 	var config AppConfig
 	if err := DB.Where("app_id = ? AND key = ?", appID, key).First(&config).Error; err != nil {
 		return nil, err
@@ -55,16 +115,24 @@ func SetAppConfig(appID uint, key, value string) error {
 	err := DB.Where("app_id = ? AND key = ?", appID, key).First(&config).Error
 	if err == nil {
 		config.Value = value
-		return DB.Save(&config).Error
+		err = DB.Save(&config).Error
+	} else {
+		// If not found, create new
+		config = AppConfig{
+			AppID: appID,
+			Key:   key,
+			Value: value,
+		}
+		err = DB.Create(&config).Error
 	}
 
-	// If not found, create new
-	config = AppConfig{
-		AppID: appID,
-		Key:   key,
-		Value: value,
+	if err == nil {
+		// Update cache immediately
+		cacheMutex.Lock()
+		configCache[key] = value
+		cacheMutex.Unlock()
 	}
-	return DB.Create(&config).Error
+	return err
 }
 
 func GetAppConfigs(appID uint) ([]AppConfig, error) {
@@ -92,6 +160,25 @@ func IsLocalLoginEnabled() bool {
 		return false
 	}
 	return config.Value == "true"
+}
+
+func IsAIAllowUserOverrideEnabled() bool {
+	var appID uint
+	if CurrentApp != nil {
+		appID = CurrentApp.ID
+	} else {
+		app, err := GetApp(common.AppName)
+		if err != nil {
+			return true // Default to true
+		}
+		appID = app.ID
+	}
+
+	config, err := GetAppConfig(appID, AIAllowUserOverride)
+	if err != nil {
+		return true // Default to true
+	}
+	return config.Value != "false" // Default to true if not explicitly "false"
 }
 
 func CheckOrInitializeUserAccess(userID uint) (bool, error) {
