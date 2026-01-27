@@ -16,6 +16,7 @@ import (
 )
 
 type ClientSetKey struct{}
+type ClusterNameKey struct{}
 
 func GetClientSet(ctx context.Context) (*cluster.ClientSet, error) {
 	cs, ok := ctx.Value(ClientSetKey{}).(*cluster.ClientSet)

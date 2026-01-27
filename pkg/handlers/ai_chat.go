@@ -207,7 +207,7 @@ func getOrCreateSession(sessionID string, userID uint) (*model.AIChatSession, er
 	return &session, nil
 }
 
-func buildMessageHistory(session model.AIChatSession, userMessage string, chatCtx ChatContext, clusterName string) []openai.ChatCompletionMessage {
+func buildMessageHistory(session model.AIChatSession, userMessage string, chatCtx ChatContext, clusterName string, clusterID uint) []openai.ChatCompletionMessage {
 	var messages []openai.ChatCompletionMessage
 
 	systemPrompt := `You are an expert Kubernetes AI Assistant named "Cloud Sentinel AI". You are embedded within the Cloud Sentinel K8s Dashboard.
@@ -230,6 +230,28 @@ To help users manage, debug, and understand their Kubernetes clusters efficientl
 4.  **UI NAVIGATION:**
     -   You can navigate the user's UI using 'navigate_to'.
     -   **Rule:** Only navigate if the user explicitly asks ("Go to...", "Show me..."). Do not navigate just because you found a resource.
+5.  **KNOWLEDGE BASE USAGE (Autonomous Learning):**
+    -   You have access to a specific Knowledge Base for this cluster.
+    -   **ALWAYS** check the "Cluster Knowledge" section before answering.
+    -   **PROACTIVE & AUTONOMOUS**: You are encouraged to save new knowledge using 'manage_knowledge' **WITHOUT** asking for permission if you are high confidence (>90%).
+    -   **WHAT TO SAVE:**
+        -   **User Corrections & Preferences**: "We use port 8080", "Always use the 'monitoring' namespace", "Don't use 'latest' tag".
+        -   **Strong Patterns**: If you see 3+ resources following a convention (e.g., "All apps have label 'team=platform'").
+        -   **Infrastructure Facts**: "Cluster is on AWS/GKE/Azure", "Ingress class is nginx", "StorageClass is gp2/standard".
+        -   **Standard Images/Registries**: "Commonly used registry is 'gcr.io/my-proj'", "Base image is usually 'alpine:3.19'".
+        -   **Troubleshooting Insights**: "Namespace 'payment' often has OOMKilled errors", "CoreDNS typically restarts on Tuesdays".
+        -   **Resource Bounds**: "Standard CPU limit is 500m", "Memory requests are usually 128Mi".
+    -   **WHAT NOT TO SAVE**: One-off errors, temporary states (pod crashing right now), or user-specific preferences not applicable to the team.
+    -   If unsure, ask: "I noticed X. Should I save this rule?"
+
+6.  **HANDLING LARGE LISTS:**
+    -   If a user asks to check "all" resources (e.g. "check all 50 ingresses"), **DO NOT REFUSE** due to volume.
+    -   **Strategy**:
+        1.  List them first.
+        2.  Analyze the summary info in the list output (e.g. hosts, status).
+        3.  If deep inspection (` + "`describe`" + `) is needed, process them in **batches of 5-10**.
+        4.  Inform the user: "I am checking the first 10..." and ask to continue.
+    -   **Efficiency**: Use ` + "`list_resources`" + ` filters whenever possible to reduce the set.
 
 **INVESTIGATION ALGORITHMS:**
 
@@ -253,6 +275,11 @@ To help users manage, debug, and understand their Kubernetes clusters efficientl
 -   Use code blocks for logs, command outputs, or YAML snippets.
 -   Be concise. Don't ramble.
 
+7.  **POST-TASK REFLECTION (Mandatory):**
+    -   Before finalizing your answer, ask yourself: *"Did I just solve a non-trivial problem or discover a reusable pattern?"*
+    -   If YES -> You **MUST** call ` + "`manage_knowledge`" + ` to save the lesson (e.g., "Namespace X has a crash loop issue", "Service Y requires port 8080").
+    -   Do not wait for the user to ask you to save it. Be proactive.
+
 **CRITICAL INSTRUCTION:**
 You **must** output a <thought> block before every response or tool call.
 Example:
@@ -273,6 +300,17 @@ If the user asks you to create or generate a resource (YAML/Manifest):
 
 	// Inject Cluster Context
 	systemPrompt += fmt.Sprintf("\n\n**CURRENT CLUSTER:**\nYou are connected to cluster '%s'. When constructing navigation paths or referring to the cluster, ALWAYS use this value.", clusterName)
+
+	// Inject Knowledge Base
+	if clusterID != 0 {
+		knowledgeItems, err := model.ListKnowledge(clusterID)
+		if err == nil && len(knowledgeItems) > 0 {
+			systemPrompt += "\n\n**CLUSTER KNOWLEDGE BASE:**\nThe following persistent knowledge/rules are stored for this cluster. Use them to guide your behavior:\n"
+			for _, item := range knowledgeItems {
+				systemPrompt += fmt.Sprintf("- %s\n", item.Content)
+			}
+		}
+	}
 
 	// Inject UI Context
 	if chatCtx.Kind != "" || chatCtx.Name != "" {
@@ -518,16 +556,22 @@ func AIChat(c *gin.Context) {
 	registry.Register(&tools.ListResourcesTool{})
 	registry.Register(&tools.GetClusterInfoTool{})
 	registry.Register(&tools.NavigateToTool{})
+	registry.Register(&tools.KnowledgeTool{})
 	registry.Register(&tools.DebugAppConnectionTool{})
 
 	toolDefs := registry.GetDefinitions()
 
 	// 5. Build Message History
 	clusterName := "local"
+	var clusterID uint
 	if clientSet != nil {
 		clusterName = clientSet.Name
+		// Get Cluster ID for Knowledge Base
+		if c, err := model.GetClusterByName(clusterName); err == nil {
+			clusterID = c.ID
+		}
 	}
-	openAIMessages := buildMessageHistory(*session, req.Message, req.Context, clusterName)
+	openAIMessages := buildMessageHistory(*session, req.Message, req.Context, clusterName, clusterID)
 
 	// Save user message to DB
 	model.DB.Create(&model.AIChatMessage{
@@ -552,6 +596,7 @@ func AIChat(c *gin.Context) {
 	if clientSet != nil {
 		klog.Infof("AI Chat: Injecting cluster %s into tool context", clientSet.Name)
 		toolCtx = context.WithValue(toolCtx, tools.ClientSetKey{}, clientSet)
+		toolCtx = context.WithValue(toolCtx, tools.ClusterNameKey{}, clientSet.Name)
 	}
 	// Inject User
 	toolCtx = context.WithValue(toolCtx, tools.UserKey{}, user)

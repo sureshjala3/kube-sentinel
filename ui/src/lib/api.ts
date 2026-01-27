@@ -12,6 +12,17 @@ import {
   ChatResponse,
   AIChatSession,
 } from '@/types/ai'
+
+export interface ClusterKnowledgeBase {
+  id: number
+  cluster_id: number
+  content: string
+  added_by: string
+  metadata?: Record<string, unknown>
+  created_at: string
+  updated_at: string
+}
+
 // Resource Analysis API
 import {
   AuditLogResponse,
@@ -1574,6 +1585,23 @@ export const useRoleList = (options?: { staleTime?: number }) => {
 
 export const createRole = async (data: Partial<Role>) => {
   return await apiClient.post<{ role: Role }>(`/admin/roles/`, data)
+}
+
+// Knowledge Base API
+export const getClusterKnowledge = (clusterID: number) => {
+  return apiClient.get<{ data: ClusterKnowledgeBase[] }>(`/admin/clusters/${clusterID}/knowledge`)
+}
+
+export const addClusterKnowledge = (clusterID: number, content: string) => {
+  return apiClient.post<{ data: ClusterKnowledgeBase }>(`/admin/clusters/${clusterID}/knowledge`, {
+    content,
+    added_by: 'User (Manual)',
+    metadata: { source: 'manual_ui' },
+  })
+}
+
+export const deleteClusterKnowledge = (clusterID: number, knowledgeID: number) => {
+  return apiClient.delete(`/admin/clusters/${clusterID}/knowledge/${knowledgeID}`)
 }
 
 export const updateRole = async (id: number, data: Partial<Role>) => {

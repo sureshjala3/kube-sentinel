@@ -5,6 +5,7 @@ import {
   IconPlus,
   IconServer,
   IconTrash,
+  IconBrain,
 } from '@tabler/icons-react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { ColumnDef } from '@tanstack/react-table'
@@ -34,6 +35,7 @@ import { DeleteConfirmationDialog } from '@/components/delete-confirmation-dialo
 
 import { Action, ActionTable } from '../action-table'
 import { ClusterDialog } from './cluster-dialog'
+import { KnowledgeBaseDialog } from './knowledge-base-dialog'
 
 export function ClusterManagement() {
   const { t } = useTranslation()
@@ -45,6 +47,7 @@ export function ClusterManagement() {
   const [isImportMode, setIsImportMode] = useState(false)
   const [editingCluster, setEditingCluster] = useState<Cluster | null>(null)
   const [deletingCluster, setDeletingCluster] = useState<Cluster | null>(null)
+  const [selectedKnowledgeCluster, setSelectedKnowledgeCluster] = useState<Cluster | null>(null)
 
   const getClusterTypeBadge = useCallback(
     (cluster: Cluster) => {
@@ -169,6 +172,17 @@ export function ClusterManagement() {
       },
       {
         label: (
+          <div className="inline-flex items-center gap-2">
+            <IconBrain className="h-4 w-4" />
+            {t('clusterManagement.actions.knowledge', 'Knowledge Base')}
+          </div>
+        ),
+        onClick: (cluster) => {
+          setSelectedKnowledgeCluster(cluster)
+        },
+      },
+      {
+        label: (
           <div className="inline-flex items-center gap-2 text-destructive">
             <IconTrash className="h-4 w-4" />
             {t('common.delete', 'Delete')}
@@ -195,10 +209,10 @@ export function ClusterManagement() {
     onError: (error: Error) => {
       toast.error(
         error.message ||
-          t(
-            'clusterManagement.messages.createError',
-            'Failed to create cluster'
-          )
+        t(
+          'clusterManagement.messages.createError',
+          'Failed to create cluster'
+        )
       )
     },
   })
@@ -218,10 +232,10 @@ export function ClusterManagement() {
     onError: (error: Error) => {
       toast.error(
         error.message ||
-          t(
-            'clusterManagement.messages.updateError',
-            'Failed to update cluster'
-          )
+        t(
+          'clusterManagement.messages.updateError',
+          'Failed to update cluster'
+        )
       )
     },
   })
@@ -239,10 +253,10 @@ export function ClusterManagement() {
     onError: (error: Error) => {
       toast.error(
         error.message ||
-          t(
-            'clusterManagement.messages.deleteError',
-            'Failed to delete cluster'
-          )
+        t(
+          'clusterManagement.messages.deleteError',
+          'Failed to delete cluster'
+        )
       )
     },
   })
@@ -254,10 +268,10 @@ export function ClusterManagement() {
       queryClient.invalidateQueries({ queryKey: ['cluster-list'] })
       toast.success(
         data?.message ||
-          t(
-            'clusterManagement.messages.imported',
-            'Clusters imported successfully'
-          )
+        t(
+          'clusterManagement.messages.imported',
+          'Clusters imported successfully'
+        )
       )
       setShowClusterDialog(false)
       setIsImportMode(false)
@@ -265,10 +279,10 @@ export function ClusterManagement() {
     onError: (error: Error) => {
       toast.error(
         error.message ||
-          t(
-            'clusterManagement.messages.importError',
-            'Failed to import clusters'
-          )
+        t(
+          'clusterManagement.messages.importError',
+          'Failed to import clusters'
+        )
       )
     },
   })
@@ -391,6 +405,16 @@ export function ClusterManagement() {
         isImportMode={isImportMode}
         onSubmit={handleSubmitCluster}
       />
+
+      {/* Internal Knowledge Base Dialog */}
+      {selectedKnowledgeCluster && (
+        <KnowledgeBaseDialog
+          clusterId={selectedKnowledgeCluster.id}
+          clusterName={selectedKnowledgeCluster.name}
+          open={!!selectedKnowledgeCluster}
+          onOpenChange={(open) => !open && setSelectedKnowledgeCluster(null)}
+        />
+      )}
 
       {/* Delete Confirmation Dialog */}
       <DeleteConfirmationDialog

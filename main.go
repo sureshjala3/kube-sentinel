@@ -125,6 +125,11 @@ func setupAPIRouter(r *gin.RouterGroup, cm *cluster.ClusterManager, authHandler 
 			clusterAPI.POST("/import", cm.ImportClustersFromKubeconfig)
 			clusterAPI.PUT("/:id", cm.UpdateCluster)
 			clusterAPI.DELETE("/:id", cm.DeleteCluster)
+
+			// Knowledge Base Routes (Cluster Level)
+			clusterAPI.GET("/:id/knowledge", handlers.ListKnowledge)
+			clusterAPI.POST("/:id/knowledge", handlers.AddKnowledge)
+			clusterAPI.DELETE("/:id/knowledge/:knn_id", handlers.DeleteKnowledge)
 		}
 
 		rbacAPI := adminAPI.Group("/roles")

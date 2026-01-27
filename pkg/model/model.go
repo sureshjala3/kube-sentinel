@@ -108,6 +108,8 @@ func InitDB() {
 		UserAWSConfig{},
 
 		Cluster{},
+		ClusterKnowledgeBase{},
+
 		OAuthProvider{},
 		Role{},
 		RoleAssignment{},

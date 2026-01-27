@@ -522,7 +522,21 @@ func (t *ListResourcesTool) listIngresses(ctx context.Context, cs *cluster.Clien
 		if !shouldIncludeResource(item.Name, item.Namespace, ns, filter) {
 			continue
 		}
-		results = append(results, fmt.Sprintf("%s/%s", item.Namespace, item.Name))
+
+		var hosts []string
+		for _, rule := range item.Spec.Rules {
+			host := rule.Host
+			if host == "" {
+				host = "*"
+			}
+			hosts = append(hosts, host)
+		}
+		hostsStr := strings.Join(hosts, ", ")
+		if len(hostsStr) > 50 {
+			hostsStr = hostsStr[:47] + "..."
+		}
+
+		results = append(results, fmt.Sprintf("%s/%s (Hosts: [%s])", item.Namespace, item.Name, hostsStr))
 	}
 	return results, nil
 }

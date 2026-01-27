@@ -304,7 +304,7 @@ export function FloatingAIChat() {
                                 } else if (data.error) {
                                     toast.error(data.error)
                                 }
-                            } catch (e) {
+                            } catch {
                                 // Ignore parse errors for split JSON or empty lines
                             }
                         }
