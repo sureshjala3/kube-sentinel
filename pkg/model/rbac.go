@@ -19,7 +19,7 @@ type Role struct {
 }
 
 func (Role) TableName() string {
-	return common.GetAppTableName("k8s_roles")
+	return common.GetAppTableName("roles")
 }
 
 // RoleAssignment maps a role to a subject which can be a user or an OIDC group.
@@ -34,7 +34,7 @@ type RoleAssignment struct {
 }
 
 func (RoleAssignment) TableName() string {
-	return common.GetAppTableName("k8s_role_assignments")
+	return common.GetAppTableName("role_assignments")
 }
 
 // Convenience constants for SubjectType

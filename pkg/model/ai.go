@@ -35,7 +35,7 @@ type AISettings struct {
 }
 
 func (AISettings) TableName() string {
-	return common.GetAppTableName("k8s_ai_settings")
+	return common.GetAppTableName("ai_settings")
 }
 
 type AIChatSession struct {
@@ -49,7 +49,7 @@ type AIChatSession struct {
 }
 
 func (AIChatSession) TableName() string {
-	return common.GetAppTableName("k8s_ai_chat_sessions")
+	return common.GetAppTableName("ai_chat_sessions")
 }
 
 type AIChatMessage struct {
@@ -64,5 +64,5 @@ type AIChatMessage struct {
 }
 
 func (AIChatMessage) TableName() string {
-	return common.GetAppTableName("k8s_ai_chat_messages")
+	return common.GetAppTableName("ai_chat_messages")
 }
